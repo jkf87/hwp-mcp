@@ -1,0 +1,13 @@
+{
+  "name": "hwp-mcp-server",
+  "version": "1.0.0",
+  "description": "HWP MCP Server with Node.js",
+  "main": "hwp_mcp_server.js",
+  "scripts": {
+    "start": "node hwp_mcp_server.js"
+  },
+  "dependencies": {
+    "winax": "^3.3.3",
+    "mcp-toolkit": "^0.2.0"
+  }
+} 

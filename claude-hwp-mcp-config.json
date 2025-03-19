@@ -1,0 +1,8 @@
+{
+  "name": "hwp",
+  "display_name": "HWP Control",
+  "description": "한글(HWP) 문서 컨트롤을 위한 도구",
+  "command": "node",
+  "args": ["D:\\hwp-mcp\\hwp-mcp-node\\hwp_mcp_server.js"],
+  "schema_version": "v1"
+} 
