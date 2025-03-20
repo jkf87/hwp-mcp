@@ -1,0 +1,6 @@
+flask==2.3.3
+pywin32==306
+python-dotenv==1.0.0
+pydantic==2.5.2
+jsonschema==4.19.1
+pytest==7.4.2 
