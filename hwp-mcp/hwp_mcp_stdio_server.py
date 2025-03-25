@@ -193,7 +193,8 @@ def hwp_set_font(
     size: int = None, 
     bold: bool = False, 
     italic: bool = False, 
-    underline: bool = False
+    underline: bool = False,
+    select_previous_text: bool = False
 ) -> str:
     """Set font properties for selected text."""
     try:
@@ -207,7 +208,8 @@ def hwp_set_font(
             font_size=size,
             bold=bold,
             italic=italic,
-            underline=underline
+            underline=underline,
+            select_previous_text=select_previous_text
         ):
             logger.info("Successfully set font")
             return "Font set successfully"
@@ -825,12 +827,14 @@ def _create_letter(hwp, params, document_spec):
         hwp.insert_paragraph()
         
         # 내용
+        hwp.set_font(None, 12, False, False)
         hwp.insert_text(content)
         hwp.insert_paragraph()
         hwp.insert_paragraph()
         
         # 날짜 (오른쪽 정렬)
         # 오른쪽 정렬은 현재 구현되어 있지 않으므로 공백으로 대체
+        hwp.set_font(None, 12, False, False)
         hwp.insert_text("".ljust(40) + date)
         hwp.insert_paragraph()
         
@@ -912,6 +916,7 @@ def hwp_create_document_from_text(content: str, title: str = None, format_conten
         
         # 제목 추가
         if title:
+            # 먼저 폰트 설정 후 텍스트 입력 (수정된 방식)
             hwp.set_font(None, 16, True, False)
             hwp.insert_text(title)
             hwp.insert_paragraph()
@@ -936,6 +941,7 @@ def hwp_create_document_from_text(content: str, title: str = None, format_conten
                     heading_text = first_line[level:].strip()
                     font_size = max(11, 16 - (level - 1))  # 제목 레벨에 따라 글자 크기 조정
                     
+                    # 먼저 폰트 설정 후 텍스트 입력 (수정된 방식)
                     hwp.set_font(None, font_size, True, False)
                     hwp.insert_text(heading_text)
                     hwp.insert_paragraph()
@@ -1102,8 +1108,9 @@ def hwp_batch_operations(operations: list) -> dict:
                     bold = params.get("bold", False)
                     italic = params.get("italic", False)
                     underline = params.get("underline", False)
+                    select_previous_text = params.get("select_previous_text", False)
                     
-                    if hwp.set_font_style(font_name=name, font_size=size, bold=bold, italic=italic, underline=underline):
+                    if hwp.set_font_style(font_name=name, font_size=size, bold=bold, italic=italic, underline=underline, select_previous_text=select_previous_text):
                         result["message"] = "Font set successfully"
                     else:
                         result["status"] = "error"
