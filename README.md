@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/jkf87-hwp-mcp-badge.png)](https://mseep.ai/app/jkf87-hwp-mcp)
+
 # HWP-MCP (한글 Model Context Protocol)
 
 [![GitHub](https://img.shields.io/github/license/jkf87/hwp-mcp)](https://github.com/jkf87/hwp-mcp)
