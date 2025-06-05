@@ -605,6 +605,118 @@ class HwpController:
             print(f"텍스트 선택 실패: {e}")
             return False
 
+    def fill_table_cell(self, row: int, col: int, text: str) -> bool:
+        """현재 표의 지정 셀에 텍스트를 채웁니다."""
+        try:
+            if not self.is_hwp_running:
+                return False
+
+            original_pos = self.hwp.GetPos()
+
+            # 표의 시작 위치로 이동
+            self.hwp.Run("TableSelCell")
+            self.hwp.Run("TableSelTable")
+            self.hwp.Run("Cancel")
+            self.hwp.Run("TableSelCell")
+            self.hwp.Run("Cancel")
+
+            # 목표 셀로 이동
+            for _ in range(row - 1):
+                self.hwp.Run("TableLowerCell")
+            for _ in range(col - 1):
+                self.hwp.Run("TableRightCell")
+
+            # 내용 입력
+            self.hwp.Run("TableSelCell")
+            self.hwp.Run("Delete")
+            self.hwp.HAction.GetDefault("InsertText", self.hwp.HParameterSet.HInsertText.HSet)
+            self.hwp.HParameterSet.HInsertText.Text = text
+            self.hwp.HAction.Execute("InsertText", self.hwp.HParameterSet.HInsertText.HSet)
+
+            if original_pos:
+                self.hwp.SetPos(*original_pos)
+
+            return True
+        except Exception as e:
+            print(f"셀 입력 실패: {e}")
+            return False
+
+    def merge_table_cells(self, start_row: int, start_col: int, end_row: int, end_col: int) -> bool:
+        """현재 표에서 지정한 범위의 셀을 병합합니다."""
+        try:
+            if not self.is_hwp_running:
+                return False
+
+            original_pos = self.hwp.GetPos()
+
+            self.hwp.Run("TableSelCell")
+            self.hwp.Run("TableSelTable")
+            self.hwp.Run("Cancel")
+            self.hwp.Run("TableSelCell")
+            self.hwp.Run("Cancel")
+
+            for _ in range(start_row - 1):
+                self.hwp.Run("TableLowerCell")
+            for _ in range(start_col - 1):
+                self.hwp.Run("TableRightCell")
+
+            self.hwp.Run("TableBlockBegin")
+
+            for _ in range(end_row - start_row):
+                self.hwp.Run("TableLowerCell")
+            for _ in range(end_col - start_col):
+                self.hwp.Run("TableRightCell")
+
+            self.hwp.Run("TableBlockEnd")
+            self.hwp.Run("TableCellBlockMerge")
+
+            if original_pos:
+                self.hwp.SetPos(*original_pos)
+
+            return True
+        except Exception as e:
+            print(f"셀 병합 실패: {e}")
+            return False
+
+    def get_table_cell_text(self, row: int, col: int) -> str:
+        """현재 표의 지정 셀에서 텍스트를 가져옵니다."""
+        try:
+            if not self.is_hwp_running:
+                return ""
+
+            original_pos = self.hwp.GetPos()
+
+            self.hwp.Run("TableSelCell")
+            self.hwp.Run("TableSelTable")
+            self.hwp.Run("Cancel")
+            self.hwp.Run("TableSelCell")
+            self.hwp.Run("Cancel")
+
+            for _ in range(row - 1):
+                self.hwp.Run("TableLowerCell")
+            for _ in range(col - 1):
+                self.hwp.Run("TableRightCell")
+
+            self.hwp.Run("TableSelCell")
+            self.hwp.Run("Copy")
+
+            text = ""
+            try:
+                import win32clipboard
+                win32clipboard.OpenClipboard()
+                text = win32clipboard.GetClipboardData()
+                win32clipboard.CloseClipboard()
+            except Exception:
+                text = ""
+
+            if original_pos:
+                self.hwp.SetPos(*original_pos)
+
+            return text
+        except Exception as e:
+            print(f"셀 텍스트 가져오기 실패: {e}")
+            return ""
+
     def fill_table_with_data(self, data: List[List[str]], start_row: int = 1, start_col: int = 1, has_header: bool = False) -> bool:
         """
         현재 커서 위치의 표에 데이터를 채웁니다.
@@ -672,9 +784,12 @@ class HwpController:
             self.hwp.Run("TableSelCell")  # 현재 셀 선택
             self.hwp.Run("Cancel")        # 선택 취소
             self.hwp.Run("MoveDown")      # 아래로 이동
-            
+
+            if original_pos:
+                self.hwp.SetPos(*original_pos)
+
             return True
-            
+
         except Exception as e:
             print(f"표 데이터 채우기 실패: {e}")
             return False
