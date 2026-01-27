@@ -75,10 +75,8 @@ except ImportError as e:
 # Initialize FastMCP server
 mcp = FastMCP(
     "hwp-mcp",
-    version="0.1.0",
-    description="HWP MCP Server for controlling Hangul Word Processor",
-    dependencies=["pywin32>=305"],
-    env_vars={}
+    instructions="HWP MCP Server for controlling Hangul Word Processor",
+    dependencies=["pywin32>=305"]
 )
 
 # Global HWP controller instance

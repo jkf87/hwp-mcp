@@ -92,21 +92,27 @@ class HwpController:
     def open_document(self, file_path: str) -> bool:
         """
         문서를 엽니다.
-        
+
         Args:
             file_path (str): 열 문서의 경로
-            
+
         Returns:
             bool: 열기 성공 여부
         """
         try:
             if not self.is_hwp_running:
                 self.connect()
-            
+
             abs_path = os.path.abspath(file_path)
-            self.hwp.Open(abs_path)
-            self.current_document_path = abs_path
-            return True
+            # Use HAction with FileOpen for reliable file opening
+            pset = self.hwp.HParameterSet.HFileOpenSave
+            self.hwp.HAction.GetDefault("FileOpen", pset.HSet)
+            pset.filename = abs_path
+            pset.Format = "HWP"
+            result = self.hwp.HAction.Execute("FileOpen", pset.HSet)
+            if result:
+                self.current_document_path = abs_path
+            return result
         except Exception as e:
             print(f"문서 열기 실패: {e}")
             return False
