@@ -1113,9 +1113,10 @@ class HwpController:
                 self.hwp.HAction.Run("Cancel")
                 self._insert_text_direct(value)
             elif mode_lower == "append":
-                # 셀 끝으로 이동 후 입력
-                self.hwp.HAction.Run("MoveSelCellEnd")
+                # 셀 끝으로 이동: 전체 선택 후 오른쪽으로 이동하면 끝으로 감
+                self.hwp.HAction.Run("SelectAll")
                 self.hwp.HAction.Run("Cancel")
+                self.hwp.HAction.Run("MoveLineEnd")
                 self._insert_text_direct(value)
             else:
                 return False, f"잘못된 mode입니다: {mode}. 'replace', 'prepend', 'append' 중 하나를 사용하세요."
@@ -1520,8 +1521,10 @@ class HwpController:
                 self.hwp.HAction.Run("Cancel")
                 self._insert_text_direct(value)
             elif mode_lower == "append":
-                self.hwp.HAction.Run("MoveSelCellEnd")
+                # 셀 끝으로 이동: 전체 선택 후 오른쪽으로 이동하면 끝으로 감
+                self.hwp.HAction.Run("SelectAll")
                 self.hwp.HAction.Run("Cancel")
+                self.hwp.HAction.Run("MoveLineEnd")
                 self._insert_text_direct(value)
             else:
                 return False, f"잘못된 mode입니다: {mode}. 'replace', 'prepend', 'append' 중 하나를 사용하세요."

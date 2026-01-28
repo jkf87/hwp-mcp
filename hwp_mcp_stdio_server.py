@@ -1616,7 +1616,10 @@ def hwp_fill_cells(
     """
     표에서 경로를 따라 셀에 값을 입력합니다. 단일/배치 자동 인식.
 
-    **사용 전 권장:** hwp_navigate, hwp_find_and_show_cell로 표 구조 파악
+    **⚠️ 중요: 반드시 표 구조를 먼저 파악하세요!**
+    1. hwp_find_and_show_cell("레이블")로 시작점 찾기
+    2. hwp_table_view(depth=2)로 주변 셀 구조 확인
+    3. 구조를 이해한 후 hwp_fill_cells 호출
 
     **방향 키워드:** <left>, <right>, <up>, <down>
     - 텍스트 찾기 후 방향 이동을 조합하여 정확한 셀 탐색
