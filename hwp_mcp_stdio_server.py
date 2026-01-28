@@ -85,8 +85,19 @@ hwp_controller = None
 hwp_table_tools = None
 
 def get_hwp_controller():
-    """Get or create HwpController instance."""
+    """Get or create HwpController instance. Auto-reconnects if connection is lost."""
     global hwp_controller, hwp_table_tools
+
+    # 연결 상태 확인 및 재연결
+    if hwp_controller is not None:
+        try:
+            # 간단한 연결 테스트
+            _ = hwp_controller.hwp.XHwpWindows.Count
+        except Exception as e:
+            logger.warning(f"HWP connection lost ({e}), attempting to reconnect...")
+            hwp_controller = None
+            hwp_table_tools = None
+
     if hwp_controller is None:
         logger.info("Creating HwpController instance...")
         try:
@@ -94,10 +105,10 @@ def get_hwp_controller():
             if not hwp_controller.connect(visible=True):
                 logger.error("Failed to connect to HWP program")
                 return None
-            
+
             # 테이블 도구 인스턴스도 초기화
             hwp_table_tools = HwpTableTools(hwp_controller)
-            
+
             logger.info("Successfully connected to HWP program")
         except Exception as e:
             logger.error(f"Error creating HwpController: {str(e)}", exc_info=True)
@@ -128,6 +139,145 @@ def hwp_create() -> str:
             return "Error: Failed to create new document"
     except Exception as e:
         logger.error(f"Error creating document: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_list_tabs() -> str:
+    """
+    현재 HWP 창에서 열려있는 탭(문서) 목록을 반환합니다.
+
+    Returns:
+        str: 탭 목록 또는 에러 메시지
+    """
+    try:
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: Failed to connect to HWP program"
+
+        success, documents = hwp.get_open_documents()
+        if not success:
+            return "Error: Failed to get document list"
+
+        if not documents:
+            return "열려있는 문서가 없습니다."
+
+        result = f"열려있는 문서 ({len(documents)}개):\n"
+        for doc in documents:
+            marker = "→ " if doc["is_current"] else "  "
+            result += f"{marker}[{doc['index']}] {doc['path']}\n"
+
+        return result
+    except Exception as e:
+        logger.error(f"Error listing documents: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_switch_tab(index: int) -> str:
+    """
+    현재 HWP 창에서 특정 탭으로 전환합니다.
+
+    Args:
+        index: 탭 인덱스 (hwp_list_tabs로 확인)
+
+    Returns:
+        str: 결과 메시지
+    """
+    try:
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: Failed to connect to HWP program"
+
+        success, message = hwp.switch_document(index)
+        if success:
+            logger.info(message)
+            return message
+        else:
+            return f"Error: {message}"
+    except Exception as e:
+        logger.error(f"Error switching document: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_list_windows() -> str:
+    """
+    실행 중인 모든 HWP 창을 찾습니다.
+    다른 창에 열려있는 HWP도 포함됩니다.
+
+    Returns:
+        str: 창 목록 또는 에러 메시지
+    """
+    try:
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: Failed to connect to HWP program"
+
+        success, instances = hwp.get_all_hwp_instances()
+        if not success:
+            return "Error: Failed to get HWP instances"
+
+        if not instances:
+            return "실행 중인 HWP 인스턴스가 없습니다."
+
+        result = f"HWP 인스턴스 ({len(instances)}개):\n"
+        for inst in instances:
+            marker = "→ " if inst["is_current"] else "  "
+            result += f"{marker}[{inst['index']}] {inst['title']} (hwnd: {inst['hwnd']})\n"
+
+        return result
+    except Exception as e:
+        logger.error(f"Error listing HWP instances: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_switch_window(hwnd: int) -> str:
+    """
+    다른 HWP 창으로 전환합니다.
+
+    Args:
+        hwnd: 윈도우 핸들 (hwp_list_windows로 확인)
+
+    Returns:
+        str: 결과 메시지
+    """
+    try:
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: Failed to connect to HWP program"
+
+        success, message = hwp.connect_to_hwp_instance(hwnd)
+        if success:
+            logger.info(message)
+            return message
+        else:
+            return f"Error: {message}"
+    except Exception as e:
+        logger.error(f"Error connecting to HWP instance: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_close_window(hwnd: int) -> str:
+    """
+    HWP 창을 닫습니다 (저장 안 함).
+
+    Args:
+        hwnd: 윈도우 핸들 (hwp_list_all_instances로 확인)
+
+    Returns:
+        str: 결과 메시지
+    """
+    try:
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: Failed to connect to HWP program"
+
+        success, message = hwp.close_hwp_window(hwnd)
+        if success:
+            logger.info(message)
+            return message
+        else:
+            return f"Error: {message}"
+    except Exception as e:
+        logger.error(f"Error closing HWP window: {str(e)}", exc_info=True)
         return f"Error: {str(e)}"
 
 @mcp.tool()
@@ -185,16 +335,17 @@ def hwp_insert_text(text: str, preserve_linebreaks: bool = True) -> str:
         hwp = get_hwp_controller()
         if not hwp:
             return "Error: Failed to connect to HWP program"
-        
+
         # 현재 커서가 표 안에 있는지 확인
         is_in_table = False
         try:
             hwp.hwp.Run("TableCellBlock")
             hwp.hwp.Run("Cancel")
             is_in_table = True
-        except:
+        except Exception as e:
+            logger.debug(f"표 셀 확인 실패 (무시): {e}")
             is_in_table = False
-        
+
         # 줄바꿈 문자 처리
         if preserve_linebreaks and ('\n' in text or '\\n' in text):
             # 이스케이프된 줄바꿈 문자(\n)와 실제 줄바꿈 문자 모두 처리
@@ -316,56 +467,196 @@ def hwp_get_text() -> str:
         return f"Error: {str(e)}"
 
 @mcp.tool()
-def hwp_close(save: bool = True) -> str:
-    """Close the HWP document and connection."""
+def hwp_close_document(save: bool = False, suppress_dialog: bool = True) -> str:
+    """
+    현재 문서를 닫습니다.
+
+    Args:
+        save: 저장 후 닫을지 여부 (기본값: False)
+        suppress_dialog: 저장 확인 팝업창 표시 안함 (기본값: True)
+
+    Returns:
+        str: 결과 메시지
+    """
     try:
-        global hwp_controller, hwp_table_tools
-        if hwp_controller and hwp_controller.is_hwp_running:
-            if hwp_controller.disconnect():
-                logger.info("Successfully closed HWP connection")
-                hwp_controller = None
-                hwp_table_tools = None
-                return "HWP connection closed successfully"
-            else:
-                return "Error: Failed to close HWP connection"
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: HWP is not connected"
+
+        if hwp.close_document(save, suppress_dialog):
+            logger.info(f"Successfully closed document (save={save}, suppress_dialog={suppress_dialog})")
+            return "Document closed successfully"
         else:
-            return "HWP is already closed"
+            return "Error: Failed to close document"
     except Exception as e:
-        logger.error(f"Error closing HWP: {str(e)}", exc_info=True)
+        logger.error(f"Error closing document: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_close_all_documents(save: bool = False, suppress_dialog: bool = True) -> str:
+    """
+    모든 문서를 닫습니다.
+
+    Args:
+        save: 저장 후 닫을지 여부 (기본값: False)
+        suppress_dialog: 저장 확인 팝업창 표시 안함 (기본값: True)
+
+    Returns:
+        str: 결과 메시지
+    """
+    try:
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: HWP is not connected"
+
+        if hwp.close_all_documents(save, suppress_dialog):
+            logger.info(f"Successfully closed all documents (save={save}, suppress_dialog={suppress_dialog})")
+            return "All documents closed successfully"
+        else:
+            return "Error: Failed to close all documents"
+    except Exception as e:
+        logger.error(f"Error closing all documents: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_undo(count: int = 1) -> str:
+    """
+    실행 취소(Undo)를 수행합니다.
+
+    Args:
+        count: 취소할 횟수 (기본값: 1)
+
+    Returns:
+        str: 결과 메시지
+    """
+    try:
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: Failed to connect to HWP program"
+
+        success, message = hwp.undo(count)
+        if success:
+            logger.info(message)
+            return message
+        else:
+            return f"Error: {message}"
+    except Exception as e:
+        logger.error(f"Error in undo: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_redo(count: int = 1) -> str:
+    """
+    다시 실행(Redo)을 수행합니다.
+
+    Args:
+        count: 다시 실행할 횟수 (기본값: 1)
+
+    Returns:
+        str: 결과 메시지
+    """
+    try:
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: Failed to connect to HWP program"
+
+        success, message = hwp.redo(count)
+        if success:
+            logger.info(message)
+            return message
+        else:
+            return f"Error: {message}"
+    except Exception as e:
+        logger.error(f"Error in redo: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_find_text(text: str) -> str:
+    """
+    문서에서 텍스트를 찾습니다.
+
+    Args:
+        text: 찾을 텍스트
+
+    Returns:
+        str: 결과 메시지
+    """
+    try:
+        if not text:
+            return "Error: Text is required"
+
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: Failed to connect to HWP program"
+
+        if hwp.find_text(text):
+            logger.info(f"Found text: {text}")
+            return f"Text found: {text}"
+        else:
+            return f"Text not found: {text}"
+    except Exception as e:
+        logger.error(f"Error finding text: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_replace_text(find: str, replace: str, replace_all: bool = True) -> str:
+    """
+    문서에서 텍스트를 찾아 바꿉니다.
+
+    Args:
+        find: 찾을 텍스트
+        replace: 바꿀 텍스트
+        replace_all: 모두 바꾸기 여부 (기본값: True)
+
+    Returns:
+        str: 결과 메시지
+    """
+    try:
+        if not find:
+            return "Error: Find text is required"
+
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: Failed to connect to HWP program"
+
+        if hwp.replace_text(find, replace, replace_all):
+            logger.info(f"Replaced text: '{find}' -> '{replace}' (replace_all={replace_all})")
+            return f"Text replaced: '{find}' -> '{replace}'"
+        else:
+            return f"Text not found or replace failed: {find}"
+    except Exception as e:
+        logger.error(f"Error replacing text: {str(e)}", exc_info=True)
         return f"Error: {str(e)}"
 
 @mcp.tool()
 def hwp_ping_pong(message: str = "핑") -> str:
     """
     핑퐁 테스트용 함수입니다. 핑을 보내면 퐁을 응답하고, 퐁을 보내면 핑을 응답합니다.
-    
+
     Args:
         message: 테스트 메시지 (기본값: "핑")
-        
+
     Returns:
         str: 응답 메시지
     """
     try:
         logger.info(f"핑퐁 테스트 함수 호출됨: 메시지 - {message}")
-        
-        # 메시지에 따라 응답 생성
+
         if message == "핑":
             response = "퐁"
         elif message == "퐁":
             response = "핑"
         else:
             response = f"모르는 메시지입니다: {message} (핑 또는 퐁을 보내주세요)"
-        
-        # 응답 생성 시간 기록
+
         current_time = time.strftime("%Y-%m-%d %H:%M:%S")
-        
-        # 응답 데이터 구성
+
         result = {
             "response": response,
             "original_message": message,
             "timestamp": current_time
         }
-        
+
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         logger.error(f"핑퐁 테스트 함수 오류: {str(e)}", exc_info=True)
@@ -398,9 +689,10 @@ def hwp_create_table_with_data(rows: int, cols: int, data = None, has_header: bo
             hwp.hwp.Run("TableCellBlock")
             hwp.hwp.Run("Cancel")
             is_in_table = True
-        except:
+        except Exception as e:
+            logger.debug(f"표 셀 확인 실패 (무시): {e}")
             is_in_table = False
-        
+
         # 표 안에 있지 않은 경우에만 새 표 생성
         if not is_in_table:
             # 표 생성
@@ -1152,7 +1444,8 @@ def hwp_fill_table_with_data(data, start_row: int = 1, start_col: int = 1, has_h
                             import ast
                             processed_data = ast.literal_eval(data)
                             logger.info(f"Successfully parsed data with literal_eval: {len(processed_data)} rows")
-                        except:
+                        except Exception as e:
+                            logger.debug(f"literal_eval 파싱 실패: {e}")
                             # 단순 문자열을 직접 파싱
                             try:
                                 # 문자열에서 쉼표로 구분된 항목 추출 시도
@@ -1201,6 +1494,210 @@ def hwp_fill_table_with_data(data, start_row: int = 1, start_col: int = 1, has_h
     except Exception as e:
         logger.error(f"표 데이터 입력 중 오류: {str(e)}", exc_info=True)
         return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_navigate(direction: str) -> str:
+    """
+    표에서 지정된 방향으로 이동하고 현재 셀의 내용을 반환합니다.
+    표 구조를 실시간으로 탐색할 때 유용합니다.
+
+    Args:
+        direction: 이동 방향 ("left", "right", "up", "down")
+
+    Returns:
+        str: 이동 후 현재 셀의 내용
+    """
+    try:
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: HWP 프로그램에 연결할 수 없습니다."
+
+        success, dir_used, cell_text = hwp.navigate_and_get_cell(direction)
+
+        if success:
+            return f"[{dir_used}] → 현재 셀: 「{cell_text}」"
+        else:
+            return f"Error: {cell_text}"
+
+    except Exception as e:
+        logger.error(f"네비게이션 오류: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+
+@mcp.tool()
+def hwp_find_and_show_cell(text: str) -> str:
+    """
+    텍스트를 찾고 해당 셀의 내용을 반환합니다.
+    표 구조 탐색의 시작점으로 유용합니다.
+
+    Args:
+        text: 찾을 텍스트
+
+    Returns:
+        str: 찾은 셀의 내용
+    """
+    try:
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: HWP 프로그램에 연결할 수 없습니다."
+
+        success, cell_text = hwp.find_and_get_cell(text)
+
+        if success:
+            return f"'{text}' 찾음 → 현재 셀: 「{cell_text}」"
+        else:
+            return f"Error: {cell_text}"
+
+    except Exception as e:
+        logger.error(f"찾기 오류: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+
+@mcp.tool()
+def hwp_table_view(depth: int = 1) -> dict:
+    """
+    현재 위치 기준으로 주변 셀들의 내용을 가져옵니다.
+    표 구조를 파악할 때 유용합니다.
+
+    **사용 예시:**
+    ```
+    # 상하좌우 1칸씩 보기
+    hwp_table_view(depth=1)
+    # 결과: {"center": "현재", "up_1": "위", "down_1": "아래", ...}
+
+    # 2칸씩 보기
+    hwp_table_view(depth=2)
+    # 결과: {"center": "현재", "up_1": "위1", "up_2": "위2", ...}
+    ```
+
+    **hwp_navigate, hwp_find_and_show_cell과 함께 사용:**
+    1. hwp_find_and_show_cell("레이블")로 시작점 찾기
+    2. hwp_table_view()로 주변 구조 파악
+    3. hwp_navigate("방향")으로 이동
+    4. hwp_fill_cells()로 값 입력
+
+    Args:
+        depth: 탐색 깊이 (기본값: 1, 최대 권장: 3)
+
+    Returns:
+        dict: 셀 내용 딕셔너리
+            - "center": 현재 셀
+            - "up_1", "up_2", ...: 위쪽 셀들
+            - "down_1", "down_2", ...: 아래쪽 셀들
+            - "left_1", "left_2", ...: 왼쪽 셀들
+            - "right_1", "right_2", ...: 오른쪽 셀들
+    """
+    try:
+        hwp = get_hwp_controller()
+        if not hwp:
+            return {"error": "HWP 프로그램에 연결할 수 없습니다."}
+
+        # depth 제한
+        depth = min(max(depth, 1), 5)
+
+        success, result = hwp.get_table_view(depth)
+
+        if success:
+            logger.info(f"테이블 뷰 가져오기 성공 (depth={depth})")
+            return result
+        else:
+            return result
+
+    except Exception as e:
+        logger.error(f"테이블 뷰 오류: {str(e)}", exc_info=True)
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def hwp_fill_cells(
+    path_value_map: dict,
+    mode: str = "replace"
+) -> str:
+    """
+    표에서 경로를 따라 셀에 값을 입력합니다. 단일/배치 자동 인식.
+
+    **사용 전 권장:** hwp_navigate, hwp_find_and_show_cell로 표 구조 파악
+
+    **방향 키워드:** <left>, <right>, <up>, <down>
+    - 텍스트 찾기 후 방향 이동을 조합하여 정확한 셀 탐색
+
+    **사용 예시:**
+    ```
+    # 레이블 오른쪽 셀에 값 입력
+    hwp_fill_cells({"이름 > <right>": "홍길동"})
+
+    # 헤더 아래 셀에 값 입력
+    hwp_fill_cells({"항목1 > <down>": "값1"})
+
+    # 여러 셀 배치 입력
+    hwp_fill_cells({
+        "이름 > <right>": "홍길동",
+        "연락처 > <right>": "010-1234-5678",
+        "주소 > <right>": "서울시"
+    })
+
+    # 복잡한 경로 (여러 번 이동)
+    hwp_fill_cells({
+        "합계 > <down> > <down>": "100",
+        "비고 > <right> > <down>": "완료"
+    })
+
+    # 기존 내용 앞에 추가 (예: "원" → "1000원")
+    hwp_fill_cells({"금액 > <right>": "1000"}, mode="prepend")
+    ```
+
+    **경로 형식:**
+    - "텍스트 > <방향> > <방향> > ..."
+    - 구분자: " > " 또는 "/"
+    - 첫 번째 항목: 찾을 텍스트 (표 안의 셀)
+    - 이후 항목: 방향 키워드로 이동
+
+    Args:
+        path_value_map: 경로와 값의 딕셔너리
+            - 키: 경로 문자열 (텍스트와 방향 키워드 조합)
+            - 값: 입력할 값
+        mode: 입력 모드
+            - "replace": 기존 내용 삭제 후 입력 (기본값)
+            - "prepend": 기존 내용 앞에 추가 (예: "명" → "3명")
+            - "append": 기존 내용 뒤에 추가
+
+    Returns:
+        str: 처리 결과 메시지
+    """
+    try:
+        if not path_value_map:
+            return "Error: path_value_map이 필요합니다."
+
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: HWP 프로그램에 연결할 수 없습니다."
+
+        # 배치 처리 (direction은 경로에서 결정되므로 "right"를 기본값으로)
+        results = hwp.fill_cells_by_path_batch(path_value_map, "right", mode)
+
+        # 결과 정리
+        success_count = 0
+        fail_count = 0
+        messages = []
+
+        for path_str, (success, message) in results.items():
+            if success:
+                success_count += 1
+                messages.append(f"✓ {path_str}: {message}")
+            else:
+                fail_count += 1
+                messages.append(f"✗ {path_str}: {message}")
+
+        summary = f"\n총 {success_count}개 성공, {fail_count}개 실패"
+        result_message = "\n".join(messages) + summary
+
+        logger.info(f"셀 채우기 완료: {success_count}개 성공, {fail_count}개 실패")
+        return result_message
+
+    except Exception as e:
+        logger.error(f"셀 채우기 중 오류: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
 
 @mcp.tool()
 def hwp_fill_column_numbers(start: int = 1, end: int = 10, column: int = 1, from_first_cell: bool = True) -> str:
