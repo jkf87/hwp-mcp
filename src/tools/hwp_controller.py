@@ -1150,79 +1150,205 @@ class HwpController:
 
         return results
 
-    def fill_table_with_data(self, data: List[List[str]], start_row: int = 1, start_col: int = 1, has_header: bool = False) -> bool:
+    def get_table_cell_text(self, row: int, col: int) -> str:
         """
-        현재 커서 위치의 표에 데이터를 채웁니다.
+        표의 특정 셀의 텍스트를 가져옵니다.
         
         Args:
-            data (List[List[str]]): 채울 데이터 2차원 리스트 (행 x 열)
-            start_row (int): 시작 행 번호 (1부터 시작)
-            start_col (int): 시작 열 번호 (1부터 시작)
-            has_header (bool): 첫 번째 행을 헤더로 처리할지 여부
+            row: 행 번호 (1부터 시작)
+            col: 열 번호 (1부터 시작)
             
         Returns:
-            bool: 작업 성공 여부
+            str: 셀 텍스트
+        """
+        try:
+            if not self.is_hwp_running:
+                return ""
+            
+            # 표 내부 진입 가정 (또는 표 선택)
+            # 안전하게 하기 위해 표 내부인지 확인하고, 아니면 에러
+            # 현재는 사용자가 표 안에 있거나, 표를 선택했다고 가정하거나
+            # 혹은 절대 좌표로 이동해야 함.
+            
+            # 여기서는 현재 커서가 표 안에 있다고 가정하고 이동
+            # 만약 표 밖에 있다면, 이 함수는 실패할 가능성이 높음
+            
+            # 셀 이동 (절대 위치로 이동하기 위해 표 시작으로 이동 후 이동)
+            self.hwp.Run("TableColBegin") # 열 시작
+            self.hwp.Run("TableRowBegin") # 행 시작 (표의 1행 1열로 이동 보장 노력)
+            
+            # 1행 1열로 이동 (확실치 않으므로 TableSelCell -> Cancel -> ... 복잡함)
+            # 가장 확실한 방법: TableSelTable -> Cancel -> TableSelCell -> Cancel (1행 1열)
+            
+            self.hwp.Run("TableSelTable")
+            self.hwp.Run("Cancel")
+            self.hwp.Run("TableSelCell")
+            self.hwp.Run("Cancel")
+            
+            # 목표 위치로 이동
+            for _ in range(row - 1):
+                self.hwp.Run("TableLowerCell")
+            for _ in range(col - 1):
+                self.hwp.Run("TableRightCell")
+                
+            # 텍스트 가져오기 (클립보드 사용이 가장 안정적)
+            self.hwp.Run("TableSelCell")
+            text = self._get_cell_text_by_clipboard()
+            self.hwp.Run("Cancel")
+            
+            return text
+        except Exception as e:
+            logger.error(f"셀 텍스트 가져오기 실패: {e}")
+            return ""
+
+    def merge_table_cells(self, start_row: int, start_col: int, end_row: int, end_col: int) -> bool:
+        """
+        표의 셀을 병합합니다.
+        
+        Args:
+            start_row, start_col: 시작 셀 좌표 (1부터 시작)
+            end_row, end_col: 끝 셀 좌표 (1부터 시작)
+            
+        Returns:
+            bool: 성공 여부
         """
         try:
             if not self.is_hwp_running:
                 return False
                 
-            # 현재 위치 저장 (나중에 복원을 위해)
-            original_pos = self.hwp.GetPos()
+            # 1행 1열로 초기화
+            self.hwp.Run("TableSelTable")
+            self.hwp.Run("Cancel")
+            self.hwp.Run("TableSelCell")
+            self.hwp.Run("Cancel")
             
-            # 1. 표 첫 번째 셀로 이동
-            self.hwp.Run("TableSelCell")  # 현재 셀 선택
-            self.hwp.Run("TableSelTable") # 표 전체 선택
-            self.hwp.Run("Cancel")        # 선택 취소 (커서는 표의 시작 부분에 위치)
-            self.hwp.Run("TableSelCell")  # 첫 번째 셀 선택
-            self.hwp.Run("Cancel")        # 선택 취소
-            
-            # 시작 위치로 이동
+            # 시작 셀로 이동
             for _ in range(start_row - 1):
                 self.hwp.Run("TableLowerCell")
-                
             for _ in range(start_col - 1):
                 self.hwp.Run("TableRightCell")
-            
-            # 데이터 채우기
-            for row_idx, row_data in enumerate(data):
-                for col_idx, cell_value in enumerate(row_data):
-                    # 셀 선택 및 내용 삭제
-                    self.hwp.Run("TableSelCell")
-                    self.hwp.Run("Delete")
-                    
-                    # 셀에 값 입력
-                    if has_header and row_idx == 0:
-                        self.set_font_style(bold=True)
-                        self.hwp.HAction.GetDefault("InsertText", self.hwp.HParameterSet.HInsertText.HSet)
-                        self.hwp.HParameterSet.HInsertText.Text = cell_value
-                        self.hwp.HAction.Execute("InsertText", self.hwp.HParameterSet.HInsertText.HSet)
-                        self.set_font_style(bold=False)
-                    else:
-                        self.hwp.HAction.GetDefault("InsertText", self.hwp.HParameterSet.HInsertText.HSet)
-                        self.hwp.HParameterSet.HInsertText.Text = cell_value
-                        self.hwp.HAction.Execute("InsertText", self.hwp.HParameterSet.HInsertText.HSet)
-                    
-                    # 다음 셀로 이동 (마지막 셀이 아닌 경우)
-                    if col_idx < len(row_data) - 1:
-                        self.hwp.Run("TableRightCell")
                 
-                # 다음 행으로 이동 (마지막 행이 아닌 경우)
-                if row_idx < len(data) - 1:
-                    for _ in range(len(row_data) - 1):
-                        self.hwp.Run("TableLeftCell")
-                    self.hwp.Run("TableLowerCell")
+            # 범위 선택 (Shift + 이동)
+            self.hwp.Run("TableSelCell") # F5 1번 (선택 모드)
             
-            # 표 밖으로 커서 이동
-            self.hwp.Run("TableSelCell")  # 현재 셀 선택
-            self.hwp.Run("Cancel")        # 선택 취소
-            self.hwp.Run("MoveDown")      # 아래로 이동
+            # 행 이동
+            row_diff = end_row - start_row
+            col_diff = end_col - start_col
+            
+            for _ in range(row_diff):
+                self.hwp.Run("TableLowerCell") # 선택 상태에서 이동하면 범위 확장됨
+            
+            for _ in range(col_diff):
+                self.hwp.Run("TableRightCell")
+                
+            # 병합 실행
+            self.hwp.Run("TableMergeCell")
+            return True
+            
+        except Exception as e:
+            logger.error(f"셀 병합 실패: {e}")
+            return False
+
+    def fill_table_cell(self, row: int, col: int, text: str) -> bool:
+        """
+        특정 셀에 텍스트를 입력합니다.
+        
+        Args:
+            row: 행 번호
+            col: 열 번호
+            text: 입력할 텍스트
+            
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            if not self.is_hwp_running:
+                return False
+                
+            # 1행 1열로 초기화
+            self.hwp.Run("TableSelTable")
+            self.hwp.Run("Cancel")
+            self.hwp.Run("TableSelCell")
+            self.hwp.Run("Cancel")
+            
+            # 목표 위치로 이동
+            for _ in range(row - 1):
+                self.hwp.Run("TableLowerCell")
+            for _ in range(col - 1):
+                self.hwp.Run("TableRightCell")
+                
+            # 입력
+            self.hwp.Run("TableSelCell")
+            self.hwp.Run("Delete") # 기존 내용 삭제
+            self._insert_text_direct(text)
             
             return True
-
         except Exception as e:
-            print(f"표 데이터 채우기 실패: {e}")
+            logger.error(f"셀 입력 실패: {e}")
             return False
+
+    def get_table_data(self) -> List[List[str]]:
+        """
+        현재 표의 전체 데이터를 2차원 리스트로 가져옵니다.
+        
+        Returns:
+            List[List[str]]: 표 데이터
+        """
+        try:
+            if not self.is_hwp_running:
+                return []
+            
+            data = []
+            
+            # 표 시작으로 이동
+            self.hwp.Run("TableSelTable")
+            self.hwp.Run("Cancel")
+            self.hwp.Run("TableSelCell")
+            self.hwp.Run("Cancel")
+            
+            current_row = 0
+            
+            while True:
+                row_data = []
+                while True:
+                    # 현재 셀 텍스트 가져오기
+                    self.hwp.Run("TableSelCell")
+                    text = self._get_cell_text_by_clipboard()
+                    self.hwp.Run("Cancel")
+                    row_data.append(text)
+                    
+                    # 오른쪽으로 이동 시도
+                    if not self.hwp.HAction.Run("TableRightCell"):
+                        break # 행의 끝
+                        
+                    # 무한 루프 방지 (너무 많은 열)
+                    if len(row_data) > 100:
+                        break
+                
+                data.append(row_data)
+                
+                # 다음 행으로 이동 (TableRightCell이 실패했으므로 현재는 행의 끝임)
+                # 다음 행의 첫 번째 칸으로 가려면...
+                # 다시 1열로 돌아가서 아래로 내려가야 함
+                
+                # 현재 행의 1열로 복귀
+                for _ in range(len(row_data) - 1):
+                    self.hwp.HAction.Run("TableLeftCell")
+                    
+                # 아래로 이동
+                if not self.hwp.HAction.Run("TableLowerCell"):
+                    break # 표의 끝
+                
+                # 무한 루프 방지 (너무 많은 행)
+                if len(data) > 1000:
+                    break
+                    
+            return data
+            
+        except Exception as e:
+            logger.error(f"표 데이터 추출 실패: {e}")
+            return []
+
 
     def _move_direction(self, direction: str) -> bool:
         """

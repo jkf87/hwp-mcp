@@ -72,6 +72,22 @@ except ImportError as e:
         print(f"Error: Could not find HwpTableTools module", file=sys.stderr)
         sys.exit(1)
 
+# Try to import HwpTemplateEngine
+try:
+    from src.tools.hwp_template_engine import HwpTemplateEngine
+    logger.info("HwpTemplateEngine imported successfully")
+except ImportError as e:
+    logger.error(f"Failed to import HwpTemplateEngine: {str(e)}")
+    # Try alternate paths
+    try:
+        from hwp_template_engine import HwpTemplateEngine
+        logger.info("HwpTemplateEngine imported from alternate path")
+    except ImportError as e2:
+        logger.error(f"Could not find HwpTemplateEngine in any path: {str(e2)}")
+        # pyhwpx가 없는 경우일 수 있으므로 경고만 로그하고 넘어감 (선택적 기능)
+        logger.warning("HwpTemplateEngine could not be imported. Template features will be disabled.")
+        HwpTemplateEngine = None
+
 # Initialize FastMCP server
 mcp = FastMCP(
     "hwp-mcp",
@@ -83,6 +99,8 @@ mcp = FastMCP(
 hwp_controller = None
 # Global HWP table tools instance
 hwp_table_tools = None
+# Global HWP template engine instance
+hwp_template_engine = None
 
 def get_hwp_controller():
     """Get or create HwpController instance. Auto-reconnects if connection is lost."""
@@ -123,6 +141,24 @@ def get_hwp_table_tools():
         if hwp_controller:
             hwp_table_tools = HwpTableTools(hwp_controller)
     return hwp_table_tools
+
+def get_hwp_template_engine():
+    """Get or create HwpTemplateEngine instance."""
+    global hwp_template_engine
+    
+    if HwpTemplateEngine is None:
+        logger.warning("HwpTemplateEngine class is not available")
+        return None
+        
+    if hwp_template_engine is None:
+        try:
+            hwp_template_engine = HwpTemplateEngine(visible=True)
+            logger.info("HwpTemplateEngine instance created")
+        except Exception as e:
+            logger.error(f"Error creating HwpTemplateEngine: {str(e)}")
+            return None
+            
+    return hwp_template_engine
 
 @mcp.tool()
 def hwp_create() -> str:
@@ -1703,6 +1739,111 @@ def hwp_fill_cells(
 
 
 @mcp.tool()
+def hwp_set_table_cell_text(row: int, col: int, text: str) -> str:
+    """
+    표의 특정 셀(행, 열)에 텍스트를 입력합니다.
+    
+    Args:
+        row: 행 번호 (1부터 시작)
+        col: 열 번호 (1부터 시작)
+        text: 입력할 텍스트
+        
+    Returns:
+        str: 결과 메시지
+    """
+    try:
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: Failed to connect to HWP program"
+            
+        if hwp.fill_table_cell(row, col, text):
+            return f"Successfully set cell ({row}, {col}) text"
+        else:
+            return f"Failed to set cell ({row}, {col}) text"
+            
+    except Exception as e:
+        logger.error(f"Error setting cell text: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_merge_table_cells(start_row: int, start_col: int, end_row: int, end_col: int) -> str:
+    """
+    표의 셀을 병합합니다.
+    
+    Args:
+        start_row: 시작 행 (1부터 시작)
+        start_col: 시작 열 (1부터 시작)
+        end_row: 끝 행 (1부터 시작)
+        end_col: 끝 열 (1부터 시작)
+        
+    Returns:
+        str: 결과 메시지
+    """
+    try:
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: Failed to connect to HWP program"
+            
+        if hwp.merge_table_cells(start_row, start_col, end_row, end_col):
+            return f"Successfully merged cells from ({start_row}, {start_col}) to ({end_row}, {end_col})"
+        else:
+            return "Failed to merge cells"
+            
+    except Exception as e:
+        logger.error(f"Error merging cells: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_fill_cell_field(field_name: str, value: str, n: int = 1) -> str:
+    """
+    HWP 문서의 셀 필드(누름틀)에 값을 입력합니다.
+    
+    Args:
+        field_name: 필드 이름
+        value: 입력할 값
+        n: 동일한 이름의 필드가 여러 개일 경우, 몇 번째 필드에 입력할지 (1부터 시작, 기본값 1)
+        
+    Returns:
+        str: 결과 메시지
+    """
+    try:
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: Failed to connect to HWP program"
+            
+        if hwp.fill_cell_field(field_name, value, n):
+            return f"Successfully filled field '{field_name}' (index {n}) with '{value}'"
+        else:
+            return f"Failed to fill field '{field_name}' (index {n})"
+            
+    except Exception as e:
+        logger.error(f"Error filling cell field: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_get_table_content() -> str:
+    """
+    현재 커서가 위치한 표의 모든 내용을 JSON 형식으로 반환합니다.
+    
+    Returns:
+        str: 표 데이터 (JSON 문자열)
+    """
+    try:
+        hwp = get_hwp_controller()
+        if not hwp:
+            return "Error: Failed to connect to HWP program"
+            
+        data = hwp.get_table_data()
+        if not data:
+            return "Error: Failed to get table data or cursor not in table"
+            
+        return json.dumps(data, ensure_ascii=False)
+        
+    except Exception as e:
+        logger.error(f"Error getting table content: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
 def hwp_fill_column_numbers(start: int = 1, end: int = 10, column: int = 1, from_first_cell: bool = True) -> str:
     """
     표의 특정 열에 시작 숫자부터 끝 숫자까지 세로로 채웁니다.
@@ -1754,6 +1895,76 @@ def hwp_fill_column_numbers(start: int = 1, end: int = 10, column: int = 1, from
         
     except Exception as e:
         logger.error(f"테이블 숫자 채우기 오류: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_get_template_fields(path: str) -> str:
+    """
+    HWP 문서 내의 템플릿 필드(누름틀) 목록을 가져옵니다.
+    
+    Args:
+        path: HWP 파일 경로
+        
+    Returns:
+        str: 필드 목록 (JSON 형식) 또는 에러 메시지
+    """
+    try:
+        engine = get_hwp_template_engine()
+        if not engine:
+            return "Error: Failed to initialize HwpTemplateEngine (pyhwpx required)"
+            
+        if not path:
+            return "Error: File path is required"
+            
+        if not engine.open(path):
+            return f"Error: Failed to open file: {path}"
+            
+        fields = engine.get_field_list()
+        return json.dumps(fields, ensure_ascii=False)
+        
+    except Exception as e:
+        logger.error(f"Error getting template fields: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_fill_template(path: str, data: str, output_path: str) -> str:
+    """
+    HWP 템플릿 필드에 데이터를 주입하고 저장합니다.
+    
+    Args:
+        path: 템플릿 HWP 파일 경로
+        data: 주입할 데이터 (JSON 문자열). 키는 필드명, 값은 넣을 텍스트.
+        output_path: 결과 파일 저장 경로
+        
+    Returns:
+        str: 결과 메시지
+    """
+    try:
+        engine = get_hwp_template_engine()
+        if not engine:
+            return "Error: Failed to initialize HwpTemplateEngine (pyhwpx required)"
+            
+        if not path or not output_path:
+            return "Error: Path and output_path are required"
+            
+        # Parse data
+        try:
+            if isinstance(data, str):
+                data_dict = json.loads(data)
+            elif isinstance(data, dict):
+                data_dict = data
+            else:
+                return "Error: Data must be JSON string or dictionary"
+        except json.JSONDecodeError as e:
+            return f"Error: Invalid JSON data: {e}"
+            
+        if engine.process_template(path, data_dict, output_path):
+            return f"Successfully filled template and saved to {output_path}"
+        else:
+            return "Error: Failed to process template"
+            
+    except Exception as e:
+        logger.error(f"Error filling template: {str(e)}", exc_info=True)
         return f"Error: {str(e)}"
 
 if __name__ == "__main__":
