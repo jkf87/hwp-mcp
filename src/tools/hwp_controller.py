@@ -50,8 +50,10 @@ class HwpController:
             # 보안 모듈 등록 (파일 경로 체크 보안 경고창 방지)
             if register_security_module:
                 try:
-                    # 보안 모듈 DLL 경로 - 실제 파일이 위치한 경로로 수정 필요
-                    module_path = os.path.abspath("D:/hwp-mcp/security_module/FilePathCheckerModuleExample.dll")
+                    # 보안 모듈 DLL 경로 - 저장소 위치 기준 상대경로 (폴더를 옮겨도 동작)
+                    module_path = os.path.abspath(os.path.join(
+                        os.path.dirname(__file__), "..", "..",
+                        "security_module", "FilePathCheckerModuleExample.dll"))
                     self.hwp.RegisterModule("FilePathCheckerModuleExample", module_path)
                     print("보안 모듈이 등록되었습니다.")
                 except Exception as e:
