@@ -18,8 +18,10 @@ HWP-MCP는 한글 워드 프로세서(HWP)를 Claude와 같은 AI 모델이 제�
 
 - Windows 운영체제
 - 한글(HWP) 프로그램 설치
-- Python 3.7 이상
+- Python 3.10 이상 (`mcp` 패키지 요구사항)
 - 필수 Python 패키지 (requirements.txt 참조)
+
+> macOS/Linux 또는 한글이 설치되지 않은 환경에서도 서버는 실행되며, 이 경우 `hwp_read_file`(HWP 파일 읽기)만 사용할 수 있습니다.
 
 ## 설치 방법
 
@@ -36,7 +38,7 @@ pip install -r requirements.txt
 
 3. (선택사항) MCP 패키지 설치:
 ```bash
-pip install mcp
+pip install "mcp<2"
 ```
 
 ## 사용 방법
@@ -57,6 +59,11 @@ Claude 데스크톱 설정 파일에 다음과 같이 HWP-MCP 서버를 등록�
 ```
 
 ### 주요 기능 예시
+
+#### HWP 파일 읽기 (한글 프로그램 불필요, 모든 OS)
+```python
+hwp_read_file("경로/문서.hwp")  # 본문 텍스트 반환, 표는 Markdown 표로 변환
+```
 
 #### 새 문서 생성
 ```python

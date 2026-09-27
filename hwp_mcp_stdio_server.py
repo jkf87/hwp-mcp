@@ -6,14 +6,16 @@ import sys
 import json
 import traceback
 import logging
-import ssl
 from threading import Thread
 import time
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
 # Configure logging
+# MCP 클라이언트가 실행하는 작업 디렉터리는 쓰기 불가일 수 있으므로 스크립트 위치에 로그를 남깁니다.
 logging.basicConfig(
     level=logging.INFO,
-    filename="hwp_mcp_stdio_server.log",
+    filename=os.path.join(current_dir, "hwp_mcp_stdio_server.log"),
     filemode="a",
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
@@ -24,11 +26,7 @@ stderr_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(leveln
 logger = logging.getLogger("hwp-mcp-stdio-server")
 logger.addHandler(stderr_handler)
 
-# Optional: Disable SSL certificate validation for development
-ssl._create_default_https_context = ssl._create_unverified_context
-
 # Set up paths
-current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
 
 try:
@@ -37,40 +35,21 @@ try:
     logger.info("FastMCP successfully imported")
 except ImportError as e:
     logger.error(f"Failed to import FastMCP: {str(e)}")
-    print(f"Error: Failed to import FastMCP. Please install with 'pip install mcp'", file=sys.stderr)
+    print("Error: Failed to import FastMCP. Please install with 'pip install \"mcp<2\"'", file=sys.stderr)
     sys.exit(1)
 
-# Try to import HwpController
+from src.tools.hwp_reader import read_hwp, read_hwp_preview_text
+
+# HwpController는 pywin32(Windows + 한글 설치)가 필요합니다.
+# 없으면 서버는 계속 실행되고, 한글 프로그램 없이 동작하는 도구(hwp_read_file 등)만 사용할 수 있습니다.
 try:
     from src.tools.hwp_controller import HwpController
     logger.info("HwpController imported successfully")
 except ImportError as e:
-    logger.error(f"Failed to import HwpController: {str(e)}")
-    # Try alternate paths
-    try:
-        sys.path.append(os.path.join(current_dir, "src"))
-        sys.path.append(os.path.join(current_dir, "src", "tools"))
-        from hwp_controller import HwpController
-        logger.info("HwpController imported from alternate path")
-    except ImportError as e2:
-        logger.error(f"Could not find HwpController in any path: {str(e2)}")
-        print(f"Error: Could not find HwpController module", file=sys.stderr)
-        sys.exit(1)
+    HwpController = None
+    logger.warning(f"HwpController unavailable ({e}); HWP automation tools are disabled, file reading tools still work")
 
-# Try to import HwpTableTools
-try:
-    from src.tools.hwp_table_tools import HwpTableTools
-    logger.info("HwpTableTools imported successfully")
-except ImportError as e:
-    logger.error(f"Failed to import HwpTableTools: {str(e)}")
-    # Try alternate paths
-    try:
-        from hwp_table_tools import HwpTableTools
-        logger.info("HwpTableTools imported from alternate path")
-    except ImportError as e2:
-        logger.error(f"Could not find HwpTableTools in any path: {str(e2)}")
-        print(f"Error: Could not find HwpTableTools module", file=sys.stderr)
-        sys.exit(1)
+from src.tools.hwp_table_tools import HwpTableTools
 
 # Initialize FastMCP server
 mcp = FastMCP(
@@ -99,6 +78,9 @@ def get_hwp_controller():
             hwp_table_tools = None
 
     if hwp_controller is None:
+        if HwpController is None:
+            logger.error("HWP automation requires Windows with pywin32 and Hangul (HWP) installed")
+            return None
         logger.info("Creating HwpController instance...")
         try:
             hwp_controller = HwpController()
@@ -139,6 +121,37 @@ def hwp_create() -> str:
             return "Error: Failed to create new document"
     except Exception as e:
         logger.error(f"Error creating document: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+
+@mcp.tool()
+def hwp_read_file(path: str, as_markdown: bool = True) -> str:
+    """
+    한글 프로그램 없이 HWP(5.0) 파일의 본문 텍스트를 읽습니다. Windows가 아닌 환경에서도 동작합니다.
+    표는 Markdown 표로 변환되며, 병합된 셀은 첫 칸에만 내용이 들어갑니다.
+    암호/배포용 문서는 본문 대신 파일에 저장된 미리보기 텍스트를 반환합니다.
+
+    Args:
+        path: HWP 파일 경로
+        as_markdown: True이면 표를 Markdown 표로, False이면 탭으로 구분된 텍스트로 반환
+
+    Returns:
+        str: 문서 텍스트 또는 에러 메시지
+    """
+    try:
+        if not path:
+            return "Error: File path is required"
+        path = os.path.abspath(os.path.expanduser(path))
+        if not os.path.isfile(path):
+            return f"Error: File not found: {path}"
+
+        try:
+            return read_hwp(path, as_markdown=as_markdown)
+        except Exception as e:
+            logger.warning(f"Failed to parse body text of {path} ({e}), falling back to preview text")
+            preview = read_hwp_preview_text(path)
+            return f"[본문을 읽을 수 없어 미리보기 텍스트를 반환합니다: {e}]\n\n{preview}"
+    except Exception as e:
+        logger.error(f"Error reading HWP file: {str(e)}", exc_info=True)
         return f"Error: {str(e)}"
 
 @mcp.tool()
