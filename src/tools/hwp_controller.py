@@ -50,19 +50,22 @@ class HwpController:
             # 보안 모듈 등록 (파일 경로 체크 보안 경고창 방지)
             if register_security_module:
                 try:
-                    # 보안 모듈 DLL 경로 - 실제 파일이 위치한 경로로 수정 필요
-                    module_path = os.path.abspath("D:/hwp-mcp/security_module/FilePathCheckerModuleExample.dll")
+                    # 보안 모듈 DLL 경로 (저장소 루트의 security_module 폴더 기준)
+                    module_path = os.path.join(
+                        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                        "security_module", "FilePathCheckerModuleExample.dll"
+                    )
                     self.hwp.RegisterModule("FilePathCheckerModuleExample", module_path)
-                    print("보안 모듈이 등록되었습니다.")
+                    logger.info("보안 모듈이 등록되었습니다.")
                 except Exception as e:
-                    print(f"보안 모듈 등록 실패 (무시하고 계속 진행): {e}")
+                    logger.warning(f"보안 모듈 등록 실패 (무시하고 계속 진행): {e}")
             
             self.visible = visible
             self.hwp.XHwpWindows.Item(0).Visible = visible
             self.is_hwp_running = True
             return True
         except Exception as e:
-            print(f"한글 프로그램 연결 실패: {e}")
+            logger.error(f"한글 프로그램 연결 실패: {e}")
             return False
 
     def disconnect(self) -> bool:
@@ -80,7 +83,7 @@ class HwpController:
 
             return True
         except Exception as e:
-            print(f"한글 프로그램 종료 실패: {e}")
+            logger.error(f"한글 프로그램 종료 실패: {e}")
             return False
 
     def set_message_box_mode(self, mode: int = 0x00020000) -> bool:
@@ -103,7 +106,7 @@ class HwpController:
             self.hwp.SetMessageBoxMode(mode)
             return True
         except Exception as e:
-            print(f"메시지 박스 모드 설정 실패: {e}")
+            logger.error(f"메시지 박스 모드 설정 실패: {e}")
             return False
 
     def close_document(self, save: bool = False, suppress_dialog: bool = True) -> bool:
@@ -142,7 +145,7 @@ class HwpController:
 
             return bool(result)
         except Exception as e:
-            print(f"문서 닫기 실패: {e}")
+            logger.error(f"문서 닫기 실패: {e}")
             # 메시지 박스 모드 복원 시도
             try:
                 self.hwp.SetMessageBoxMode(0x00000000)
@@ -184,7 +187,7 @@ class HwpController:
 
             return bool(result)
         except Exception as e:
-            print(f"모든 문서 닫기 실패: {e}")
+            logger.error(f"모든 문서 닫기 실패: {e}")
             try:
                 self.hwp.SetMessageBoxMode(0x00000000)
             except Exception as e:
@@ -206,7 +209,7 @@ class HwpController:
             self.current_document_path = None
             return True
         except Exception as e:
-            print(f"새 문서 생성 실패: {e}")
+            logger.error(f"새 문서 생성 실패: {e}")
             return False
 
     def get_open_documents(self) -> Tuple[bool, List[Dict[str, Any]]]:
@@ -264,7 +267,7 @@ class HwpController:
 
             return True, documents
         except Exception as e:
-            print(f"문서 목록 조회 실패: {e}")
+            logger.error(f"문서 목록 조회 실패: {e}")
             return False, []
 
     def switch_document(self, index: int) -> Tuple[bool, str]:
@@ -353,7 +356,7 @@ class HwpController:
 
             return True, instances
         except Exception as e:
-            print(f"HWP 인스턴스 목록 조회 실패: {e}")
+            logger.error(f"HWP 인스턴스 목록 조회 실패: {e}")
             return False, []
 
     def connect_to_hwp_instance(self, hwnd: int) -> Tuple[bool, str]:
@@ -449,8 +452,8 @@ class HwpController:
                 self.connect()
 
             abs_path = os.path.abspath(file_path)
-            print(f"[DEBUG] Opening document: {abs_path}")
-            print(f"[DEBUG] File exists: {os.path.exists(abs_path)}")
+            logger.debug(f"Opening document: {abs_path}")
+            logger.debug(f"File exists: {os.path.exists(abs_path)}")
 
             # Use HAction with FileOpen for reliable file opening
             pset = self.hwp.HParameterSet.HFileOpenSave
@@ -458,12 +461,12 @@ class HwpController:
             pset.filename = abs_path
             pset.Format = "HWP"
             result = self.hwp.HAction.Execute("FileOpen", pset.HSet)
-            print(f"[DEBUG] FileOpen result: {result}")
+            logger.debug(f"FileOpen result: {result}")
             if result:
                 self.current_document_path = abs_path
             return result
         except Exception as e:
-            print(f"문서 열기 실패: {e}")
+            logger.error(f"문서 열기 실패: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -497,7 +500,7 @@ class HwpController:
             
             return True
         except Exception as e:
-            print(f"문서 저장 실패: {e}")
+            logger.error(f"문서 저장 실패: {e}")
             return False
 
     def insert_text(self, text: str, preserve_linebreaks: bool = True) -> bool:
@@ -528,7 +531,7 @@ class HwpController:
                 # 줄바꿈이 없거나 유지하지 않는 경우 한 번에 처리
                 return self._insert_text_direct(text)
         except Exception as e:
-            print(f"텍스트 삽입 실패: {e}")
+            logger.error(f"텍스트 삽입 실패: {e}")
             return False
 
     def _set_table_cursor(self) -> bool:
@@ -569,7 +572,7 @@ class HwpController:
             self.hwp.HAction.Execute("InsertText", self.hwp.HParameterSet.HInsertText.HSet)
             return True
         except Exception as e:
-            print(f"텍스트 직접 삽입 실패: {e}")
+            logger.error(f"텍스트 직접 삽입 실패: {e}")
             return False
 
     def set_font(self, font_name: str, font_size: int, bold: bool = False, italic: bool = False, 
@@ -601,7 +604,7 @@ class HwpController:
                 select_previous_text=select_previous_text
             )
         except Exception as e:
-            print(f"글꼴 설정 실패: {e}")
+            logger.error(f"글꼴 설정 실패: {e}")
             return False
 
     def set_font_style(self, font_name: str = None, font_size: int = None, 
@@ -658,7 +661,7 @@ class HwpController:
             return True
             
         except Exception as e:
-            print(f"글꼴 스타일 설정 실패: {e}")
+            logger.error(f"글꼴 스타일 설정 실패: {e}")
             return False
 
     def _get_current_position(self):
@@ -713,7 +716,7 @@ class HwpController:
             self.hwp.HAction.Execute("TableCreate", self.hwp.HParameterSet.HTableCreation.HSet)
             return True
         except Exception as e:
-            print(f"표 삽입 실패: {e}")
+            logger.error(f"표 삽입 실패: {e}")
             return False
 
     def insert_image(self, image_path: str, width: int = 0, height: int = 0) -> bool:
@@ -734,7 +737,7 @@ class HwpController:
             
             abs_path = os.path.abspath(image_path)
             if not os.path.exists(abs_path):
-                print(f"이미지 파일을 찾을 수 없습니다: {abs_path}")
+                logger.warning(f"이미지 파일을 찾을 수 없습니다: {abs_path}")
                 return False
                 
             self.hwp.HAction.GetDefault("InsertPicture", self.hwp.HParameterSet.HInsertPicture.HSet)
@@ -745,7 +748,7 @@ class HwpController:
             self.hwp.HAction.Execute("InsertPicture", self.hwp.HParameterSet.HInsertPicture.HSet)
             return True
         except Exception as e:
-            print(f"이미지 삽입 실패: {e}")
+            logger.error(f"이미지 삽입 실패: {e}")
             return False
 
     def undo(self, count: int = 1) -> Tuple[bool, str]:
@@ -837,7 +840,7 @@ class HwpController:
             result = self.hwp.HAction.Execute("RepeatFind", pset.HSet)
             return bool(result)
         except Exception as e:
-            print(f"텍스트 찾기 실패: {e}")
+            logger.error(f"텍스트 찾기 실패: {e}")
             return False
 
     def replace_text(self, find_text: str, replace_text: str, replace_all: bool = True) -> bool:
@@ -871,7 +874,7 @@ class HwpController:
             self.hwp.HAction.Execute("AllReplace", pset.HSet)
             return True
         except Exception as e:
-            print(f"텍스트 바꾸기 실패: {e}")
+            logger.error(f"텍스트 바꾸기 실패: {e}")
             return False
 
     def get_text(self) -> str:
@@ -887,7 +890,7 @@ class HwpController:
             
             return self.hwp.GetTextFile("TEXT", "")
         except Exception as e:
-            print(f"텍스트 가져오기 실패: {e}")
+            logger.error(f"텍스트 가져오기 실패: {e}")
             return ""
 
     def set_page_setup(self, orientation: str = "portrait", margin_left: int = 1000, 
@@ -916,7 +919,7 @@ class HwpController:
             result = self.hwp.Run(f"PageSetup3 {orient_val} {margin_left} {margin_right} {margin_top} {margin_bottom}")
             return bool(result)
         except Exception as e:
-            print(f"페이지 설정 실패: {e}")
+            logger.error(f"페이지 설정 실패: {e}")
             return False
 
     def insert_paragraph(self) -> bool:
@@ -933,7 +936,7 @@ class HwpController:
             self.hwp.HAction.Run("BreakPara")
             return True
         except Exception as e:
-            print(f"단락 삽입 실패: {e}")
+            logger.error(f"단락 삽입 실패: {e}")
             return False
 
     def select_all(self) -> bool:
@@ -950,7 +953,7 @@ class HwpController:
             self.hwp.Run("SelectAll")
             return True
         except Exception as e:
-            print(f"전체 선택 실패: {e}")
+            logger.error(f"전체 선택 실패: {e}")
             return False
 
     def fill_cell_field(self, field_name: str, value: str, n: int = 1) -> bool:
@@ -986,7 +989,7 @@ class HwpController:
             
             # 3. n번째 필드가 존재하는지 확인 (인덱스는 0부터 시작하므로 n-1)
             if len(field_list) < n:
-                print(f"해당 이름의 필드가 충분히 없습니다. 필요: {n}, 존재: {len(field_list)}")
+                logger.warning(f"해당 이름의 필드가 충분히 없습니다. 필요: {n}, 존재: {len(field_list)}")
                 return False
                 
             # 4. n번째 필드의 위치로 이동
@@ -1000,7 +1003,7 @@ class HwpController:
             
             return True
         except Exception as e:
-            print(f"셀필드 값 채우기 실패: {e}")
+            logger.error(f"셀필드 값 채우기 실패: {e}")
             return False
         
     def select_last_text(self) -> bool:
@@ -1029,7 +1032,7 @@ class HwpController:
             
             return True
         except Exception as e:
-            print(f"텍스트 선택 실패: {e}")
+            logger.error(f"텍스트 선택 실패: {e}")
             return False
 
     def fill_cell_next_to_label(
@@ -1124,7 +1127,7 @@ class HwpController:
             return True, f"'{label}' 옆 셀에 '{value}' 입력 완료"
 
         except Exception as e:
-            print(f"셀 채우기 실패: {e}")
+            logger.error(f"셀 채우기 실패: {e}")
             return False, f"셀 채우기 실패: {str(e)}"
 
     def fill_cells_from_dict(
@@ -1221,7 +1224,7 @@ class HwpController:
             return True
 
         except Exception as e:
-            print(f"표 데이터 채우기 실패: {e}")
+            logger.error(f"표 데이터 채우기 실패: {e}")
             return False
 
     def _move_direction(self, direction: str) -> bool:

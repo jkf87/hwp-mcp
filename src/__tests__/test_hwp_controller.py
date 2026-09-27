@@ -9,6 +9,9 @@ import pytest
 import os
 import tempfile
 from unittest.mock import patch, MagicMock
+
+pytest.importorskip("win32com", reason="HwpController requires pywin32 (Windows)")
+
 from src.tools.hwp_controller import HwpController
 
 class TestHwpController:
